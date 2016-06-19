@@ -1,0 +1,89 @@
+---
+title: "Practical Machine Learning"
+author: "Modak Raj"
+date: "June 19, 2016"
+output: html_document
+---
+##Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+##Executive Summary
+The goal of this assigment is to build a machine learning model that predicts how well a participant has performed a Weight Lifting Excercise.
+The data was downloaded from the source and reviewed for completeness. This revealed that there were 160 columns in the dataset. Using data cleanup and feature selection, this was reduced to 50. The data was partitioned into training and validation sets, and two models were built using the Recursive Partitioning and Regression Trees (rpart) and Random Forest methods. The Random Forest significantly outperformed the rpart model and was selected for further use.
+
+Answers produced by applying the Random Forest model to the testing data were submitted to Coursera and achieved a 20/20 score.
+
+##Getting and Cleaning Data
+The training set contains 19622 rows and the test set contains 20 rows, each comprising 160 columns. A few records contain "#DIV/0!" values which may cause computational problems. There are also many empty values and many NAs. The emply and error value have both been replaced with NA. With these adjustments made, further inspection shows that a large number of the columns predominently contain NAs. Since NA values are of no value to the model, these columns have been removed from the dataset, along with timestamps and other non-performance variables.
+
+Loading all the packages
+```{r}
+library(caret)
+library(RCurl)
+library(rpart)
+library(randomForest)
+library(dplyr)
+```
+
+
+```{r}
+# Read training data
+pml.training <- read.csv("pml-training.csv", header=T)   
+# Read testing data
+pml.testing <- read.csv("pml-testing.csv", header=T)     
+
+#Remove id time-series and window columns
+pml.training <- select(pml.training, -X,-raw_timestamp_part_1,-raw_timestamp_part_2,-cvtd_timestamp,-new_window,-num_window)
+
+# Clean up missing data
+# #DIV/o! to NA
+pml.training[pml.training=="#DIV/0!"] <- NA 
+
+# Empty records to NA
+pml.training[pml.training==""] <- NA                        
+
+# Identify and remove columns with NAs
+# Number of columns in clean training dataset
+keep <- as.vector(apply(pml.training, 2, function(col) { tot = sum(is.na(col)); return(tot==0); }))
+pml.training.clean <- pml.training[ ,keep]  
+cols.clean <- ncol(pml.training.clean)                      
+cols.clean                                                 
+```
+
+##Processing clean data into Analytical data
+Creating a training and testing/validation data set.
+
+```{r}
+pml.partition <- createDataPartition(y = pml.training.clean$classe, p=0.66, list = F)
+# Create traning dataset
+training <- pml.training.clean[pml.partition, ]              
+# create validation dataset
+validation <- pml.training.clean[-pml.partition, ]           
+```
+##Trying Decision Tree
+As a first attempt, I decided to use the training data to derive a decision tree.
+```{r}
+#Model fitting
+dtfit <- rpart(classe ~ ., data=training, method="class")
+#Trying on Validation Data
+dtvalidationpredictions <- predict(dtfit, validation, type="class")
+confusionMatrix(dtvalidationpredictions, validation$classe)
+```
+This fit was not very good - accuracy is about 74%. Lets look at another model now.
+
+##Random Forest Model
+
+```{r}
+#Model Fitting
+rffit <- randomForest(classe ~ ., data=training, method="class")
+#Trying on validation data
+rfvalidationpredictions <- predict(rffit, validation, type="class")
+confusionMatrix(rfvalidationpredictions, validation$classe)
+```
+This fit was much better.The accuracy from applying the model to the validation data was 99.61%.
+
+##Precition on Testing Data
+```{r}
+testpredict <- predict(rffit, pml.testing, type="class")
+testpredict
+```
